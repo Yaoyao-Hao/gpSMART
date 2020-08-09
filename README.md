@@ -12,7 +12,7 @@ A **g**eneral **p**urpose **S**tate **MA**chine **R**unner for **T**raining anim
 * See the example code ``` gpSMART_Library.ino``` to learn how to use the library.
  
 ## Citation
-gpSMART: A **g**eneral **p**urpose **S**tate **MA**chine **R**unner for **T**raining animal behaviors. (2020) https://github.com/Yaoyao-Hao/gpSMART
+**gpSMART**: A **g**eneral **p**urpose **S**tate **MA**chine **R**unner for **T**raining animal behaviors (2020) https://github.com/Yaoyao-Hao/gpSMART
 
 ## Contribution
 Feel free to pull a request If you want to contribute code to this repository, or leave your messages (bugs, comments, etc.) in the Issues page.

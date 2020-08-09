@@ -19,3 +19,7 @@ A **g**eneral **p**urpose **S**tate **MA**chine **R**unner for **T**raining anim
 
 ## Contribution
 Feel free to pull a request If you want to contribute code to this repository, or leave your messages (bugs, comments, etc.) in the Issues page.
+
+## Required Libaray
+* DueTimer library from: https://github.com/ivanseidel/DueTimer
+* pwm_lib library from: https://github.com/antodom/pwm_lib

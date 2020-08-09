@@ -7,13 +7,6 @@
 
 #include "gpSMART.h"
 
-/*
-     since the member function of class can not be attached to Timer, the
-     gpSMART_Runner() function and all related functions and varialbes
-     have to be defined outside class gpSMART as follow.
-     see details: https://stackoverflow.com/questions/5966698/error-use-of-deleted-function
-     see also: http://www.parashift.com/c++-faq-lite/pointers-to-members.html
-*/
 
 /******************************************************************/
 /************************ hardware related ************************/

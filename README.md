@@ -1,2 +1,2 @@
 # gpSMART
-A **g**eneral purpose State MAchine Runner for Training animal behaviors.
+A **g**eneral **p**urpose **S**tate **MA**chine **R**unner for **T**raining animal behaviors.

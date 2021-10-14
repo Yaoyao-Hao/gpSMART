@@ -31,13 +31,13 @@
  */
  /* Assignment
   * 0, 1 for Serial1
-  * 4P, 7P, 8P, 37PA, 38PA, 39A for Controller (P FOR PWM, A FOR ANALOG)
+  * 4P, 7P, 8P, 38PA, 39A for Controller (P FOR PWM, A FOR ANALOG)
   * 11, 12 for MOSI
   * 13 for LED
   * 18, 19 for I2C
   */
 const byte gpSMART_DI_Lines[]   = {14, 15, 17, 24, 25, 26, 27, 28};
-const byte gpSMART_DO_Lines[]   = {29, 30, 31, 32, 33, 34, 35, 36};
+const byte gpSMART_DO_Lines[]   = {30, 31, 32, 33, 34, 35, 36, 37};
 const byte gpSMART_PWM_Lines[]  = { 5,  6,  9, 10, 20, 21, 22, 23};
 const byte gpSMART_tPWM_Lines[] = { 2,  3, 16, 29}; // independent PWMs
 

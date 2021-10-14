@@ -11,7 +11,7 @@
 /******************************************************************/
 /************************ hardware related ************************/
 /******************************************************************/
-// using Timer3 for gpSMART
+// using Timer for gpSMART
 IntervalTimer gpSMART_Timer;
 
 // period and duty for true PWMs

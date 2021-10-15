@@ -1,34 +1,28 @@
 /*
    gpSMART: A general purpose State MAchine Runner for Training animal behaviors.
-   This library enables constructing and running state machine on a single Arduino (due) board.
-   Created by Yaoyao Hao (yaoyaoh90@gmail.com) 2020.
+   This library enables constructing and running state machine on a single Teensy (3.6) board.
+   Created by Yaoyao Hao (yaoyaoh90@gmail.com) 2021.
 */
 
 
-#include "gpSMART_Arduino.h"
-
+#include "gpSMART_Habits.h"
+#include "MPR121.h"
 
 /******************************************************************/
 /************************ hardware related ************************/
 /******************************************************************/
-// using Timer3 for gpSMART
-DueTimer gpSMART_Timer = DueTimer(3);
-// true PWMs
-pwm<pwm_pin::PWMH1_PA19> tPWM1;
-pwm<pwm_pin::PWML2_PA20> tPWM2;
-pwm<pwm_pin::PWMH5_PC19> tPWM3;
-pwm<pwm_pin::PWMH6_PC18> tPWM4;
+// Timer for gpSMART
+IntervalTimer gpSMART_Timer;
+
+// capacitive touch sensor
+MPR121 cap = MPR121(0x5A);
+
 // period and duty for true PWMs
-uint32_t tPWM1_period[FREQ_NUM_PER_PWM] = {100000, 200000, 300000, 400000}; // 1000-4000 us (i.e., 1000-4000 Hz)
-uint32_t tPWM1_duty[FREQ_NUM_PER_PWM]   = {50000,  100000, 150000, 200000}; // 500-2000  us (i.e., 50% duty)
-uint32_t tPWM2_period[FREQ_NUM_PER_PWM] = {100000, 200000, 300000, 400000}; //
-uint32_t tPWM2_duty[FREQ_NUM_PER_PWM]   = {50000,  100000, 150000, 200000}; //
-uint32_t tPWM3_period[FREQ_NUM_PER_PWM] = {100000, 200000, 300000, 400000}; //
-uint32_t tPWM3_duty[FREQ_NUM_PER_PWM]   = {50000,  100000, 150000, 200000}; //
-uint32_t tPWM4_period[FREQ_NUM_PER_PWM] = {100000, 200000, 300000, 400000}; //
-uint32_t tPWM4_duty[FREQ_NUM_PER_PWM]   = {50000,  100000, 150000, 200000}; //
+uint32_t tPWM_frequency[ntPWMs][FREQ_NUM_PER_PWM] = {{3000, 6000, 9000, 12000}, {3000, 6000, 9000, 12000}, {3000, 6000, 9000, 12000}, {3000, 6000, 9000, 12000}}; // 3-12 kHz
+byte tPWM_duty[ntPWMs][FREQ_NUM_PER_PWM]          = {{128,  128, 128, 128}, {128,  128, 128, 128}, {128,  128, 128, 128}, {128,  128, 128, 128}}; // Deafault: 50% duty cycle
+
 // Digital Input Enables
-byte DigitalInputsEnabled[nDIOs] = {1, 1, 1, 1, 1, 1, 1, 1};
+byte DigitalInputsEnabled[nDIs] = {1, 1, 1, 1};
 
 
 /*******************************************************************/
@@ -44,11 +38,13 @@ bool volatile smartRunning = false; 		// indicating if state matrix for current 
 /*****************************************************************/
 StateMatrix sma;   // State Matrix
 // Other public variables
-bool PortInputLineValue[nDIOs] = {0}; // Direct reads of digital values of IR beams
-bool PortInputLineLastKnownStatus[nDIOs] = {0}; // Last known status of IR beams
+bool PortInputLineValue[nDIs] = {0}; // Direct reads of digital values
+bool PortInputLineLastKnownStatus[nDIs] = {0}; // Last known status
+bool PortLickLineValue[nLicks] = {0}; // Direct reads of digital values
+bool PortLickLineLastKnownStatus[nLicks] = {0}; // Last known status
 int CurrentState = 0; // What state is the state machine currently in?
 int NewState = 0;
-byte CurrentEvent[nDIOs + 2 + 2 * GLOBAL_TC_NUM] = {0}; // What event code just happened and needs to be handled. Up to 14 can be acquired per loop.
+byte CurrentEvent[nDIs + nLicks + 2 + 2 * GLOBAL_TC_NUM] = {0}; // What event code just happened and needs to be handled. Up to 14 can be acquired per loop.
 byte nCurrentEvents = 0; // Index of current event
 byte SoftEvent = 0; // What soft event code just happened
 bool GlobalTimersActive[GLOBAL_TC_NUM] = {0}; // 0 if timer x is inactive, 1 if it's active.
@@ -63,56 +59,43 @@ unsigned long CurrentTime = 0; // Current time in gpSMART state machine (units =
 /******************************************************************/
 gpSMART::gpSMART() {
   // init gpSMART hardware ports
-  for (int x = 0; x < nDIOs; x++) {
+  for (int x = 0; x < nDIs; x++) {
     pinMode(gpSMART_DI_Lines[x], INPUT_PULLUP);
   }
-  for (int x = 0; x < nDIOs; x++) {
+  for (int x = 0; x < nDIs; x++) {
     pinMode(gpSMART_DO_Lines[x], OUTPUT);
-    digitalWriteDirect(gpSMART_DO_Lines[x], 0);
+    digitalWrite(gpSMART_DO_Lines[x], 0);
   }
   for (int x = 0; x < nPWMs; x++) {
     pinMode(gpSMART_PWM_Lines[x], OUTPUT);
     analogWrite(gpSMART_PWM_Lines[x], 0);
+  }
+  for (int x = 0; x < ntPWMs; x++) {
     setTruePWMOutput(x + 1, 0);
   }
   // init Serial ports used by gpSMART
-  Serial3.begin(115200);
-  SerialUSB.begin(115200);
-  // attach ISR to gpSMART_Timer
-  gpSMART_Timer.attachInterrupt(gpSMART_Runner);
-  gpSMART_Timer.setPeriod(100); // Runs every 100us
+  Serial1.begin(115200);
+  Serial.begin(115200);
+  // for capacitive sensor
+  Wire.begin();
+  Wire.setClock(1000000);
+  cap.begin(4); // using 4 out of 12 electrode
+  // attach ISR to gpSMART_Timer (not necessary for Teensy)
+  //gpSMART_Timer.begin(gpSMART_Runner, 100); // Runs every 100us
+  //gpSMART_Timer.end();
+  analogWriteFrequency(5, 1000); // FTM0  5, 6, 9, 10, 20, 21, 22, 23; default: 488.28 Hz
 }
 
 void gpSMART::setDigitalInputsEnabled(byte* PortEnabled) {
-  for (int i = 0; i < nDIOs; i++) {
+  for (int i = 0; i < nDIs; i++) {
     DigitalInputsEnabled[i] = PortEnabled[i];
   }
 }
 
-void gpSMART::setTruePWMFrequency(byte tPWM_num, byte freq_num, float frequency, float duty) {
-  if (freq_num > 0 && freq_num <= FREQ_NUM_PER_PWM) {
-    uint32_t period = 100000000 / frequency;
-    uint32_t duty_period = period * duty;
-    switch (tPWM_num) {
-      case 1:
-        tPWM1_period[freq_num - 1] = period;
-        tPWM1_duty[freq_num - 1] = duty_period;
-        break;
-      case 2:
-        tPWM2_period[freq_num - 1] = period;
-        tPWM2_duty[freq_num - 1] = duty_period;
-        break;
-      case 3:
-        tPWM3_period[freq_num - 1] = period;
-        tPWM3_duty[freq_num - 1] = duty_period;
-        break;
-      case 4:
-        tPWM4_period[freq_num - 1] = period;
-        tPWM4_duty[freq_num - 1] = duty_period;
-        break;
-      default:
-        break;
-    }
+void gpSMART::setTruePWMFrequency(byte tPWM_num, byte freq_num, uint32_t freq, byte duty) {
+  if (tPWM_num > 0 && tPWM_num <= ntPWMs && freq_num > 0 && freq_num <= FREQ_NUM_PER_PWM) {
+    tPWM_frequency[tPWM_num - 1][freq_num - 1] = freq;
+    tPWM_duty[tPWM_num - 1][freq_num - 1] = duty;
   }
 }
 
@@ -235,15 +218,15 @@ int gpSMART::AddState(gpSMART_State *State)
   return 0;
 }
 
-int gpSMART::SetGlobalTimer(byte TimerNumber, float TimerDuration) {
-  // TimerNumber: The number of the timer you are setting (an integer, 1-GLOBAL_TC_NUM).
+void gpSMART::SetGlobalTimer(byte TimerNumber, float TimerDuration) {
+  // TimerNumber: The number of the timer you are setting (an integer, 1~GLOBAL_TC_NUM).
   // TimerDuration: The duration of the timer, following timer start (ms)
   if (TimerNumber > 0 && TimerNumber <= GLOBAL_TC_NUM) {
     sma.GlobalTimerThresholds[TimerNumber - 1] = TimerDuration * TimerScaleFactor;
   }
 }
 
-int gpSMART::SetGlobalCounter(byte CounterNumber, String TargetEventName, uint16_t Threshold) {
+void gpSMART::SetGlobalCounter(byte CounterNumber, String TargetEventName, uint16_t Threshold) {
   // CounterNumber: The number of the counter you are setting (an integer, 1-GLOBAL_TC_NUM).
   // TargetEventName: The name of the event to count (a string; see Input Event Codes: EventNames[25])
   // Threshold: The number of event instances to count. (an integer).
@@ -257,46 +240,46 @@ int gpSMART::SetGlobalCounter(byte CounterNumber, String TargetEventName, uint16
 }
 
 void gpSMART::PrintMatrix() {
-  SerialUSB.print("Number of States: ");
-  SerialUSB.println(sma.nStates);
-  SerialUSB.println("StateNames\tTimer\tDefined");
+  Serial.print("Number of States: ");
+  Serial.println(sma.nStates);
+  Serial.println("StateNames\tTimer\tDefined");
   for (int i = 0; i < sma.nStates; i++) {
-    SerialUSB.print(sma.StateNames[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.StateTimers[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.StatesDefined[i]);
-    SerialUSB.println();
+    Serial.print(sma.StateNames[i]);
+    Serial.print("\t");
+    Serial.print(sma.StateTimers[i]);
+    Serial.print("\t");
+    Serial.print(sma.StatesDefined[i]);
+    Serial.println();
   }
-  SerialUSB.println("InputMatrix: ");
+  Serial.println("InputMatrix: ");
   for (int i = 0; i < sma.nStates; i++) {
     for (int j = 0; j < nInputs; j++) {
-      SerialUSB.print(sma.InputMatrix[i][j]);
+      Serial.print(sma.InputMatrix[i][j]);
     }
-    SerialUSB.println();
+    Serial.println();
   }
-  SerialUSB.println("OutputMatrix: ");
+  Serial.println("OutputMatrix: ");
   for (int i = 0; i < sma.nStates; i++) {
     for (int j = 0; j < nOutputs; j++) {
-      SerialUSB.print(sma.OutputMatrix[i][j]);
+      Serial.print(sma.OutputMatrix[i][j]);
     }
-    SerialUSB.println();
+    Serial.println();
   }
-  SerialUSB.println("GTthres\tGCevt\tGCthres");
+  Serial.println("GT-thres\tGC-evt\tGC-thres");
   for (int i = 0; i < GLOBAL_TC_NUM; i++) {
-    SerialUSB.print(sma.GlobalTimerThresholds[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.GlobalCounterAttachedEvents[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.GlobalCounterThresholds[i]);
-    SerialUSB.println();
+    Serial.print(sma.GlobalTimerThresholds[i]);
+    Serial.print("\t");
+    Serial.print(sma.GlobalCounterAttachedEvents[i]);
+    Serial.print("\t");
+    Serial.print(sma.GlobalCounterThresholds[i]);
+    Serial.println();
   }
 }
 
 void gpSMART::Run() {
   if (smartRunning == 1) {
     smartRunning = 0;
-    gpSMART_Timer.stop();
+    gpSMART_Timer.end();
   }
   NewState = 0;
   CurrentState = 0;
@@ -313,9 +296,9 @@ void gpSMART::Run() {
     GlobalTimersActive[x] = false;
   }
   // Read initial state of sensors
-  for (int x = 0; x < nDIOs; x++) {
+  for (int x = 0; x < nDIs; x++) {
     if (DigitalInputsEnabled[x] == 1) {
-      PortInputLineValue[x] = digitalReadDirect(gpSMART_DI_Lines[x]); // Read each photogate's current state into an array
+      PortInputLineValue[x] = digitalRead(gpSMART_DI_Lines[x]); // Read each photogate's current state into an array
       if (PortInputLineValue[x] == HIGH) {
         PortInputLineLastKnownStatus[x] = HIGH; // Update last known state of input line
       } else {
@@ -333,14 +316,14 @@ void gpSMART::Run() {
   // Adjust outputs
   setStateOutputs(CurrentState);
   smartRunning = 1;
-  gpSMART_Timer.start(); // Runs every 100us
-  SerialUSB.println("M: State machine is running...");
+  gpSMART_Timer.begin(gpSMART_Runner, 100); // Runs every 100us
+  Serial.println("M: State machine is running...");
 }
 
 void gpSMART::Stop() {
   // stop Timer
   smartRunning = 0;
-  gpSMART_Timer.stop();
+  gpSMART_Timer.end();
 
   // reset hardware ports
   setStateOutputs(sma.nStates);
@@ -349,32 +332,32 @@ void gpSMART::Stop() {
 void gpSMART::ManualOverride(String TargetAction, byte DataByte) {
   int TargetActionCode = find_idx(OutputActionNames, nOutputs, TargetAction);
   if (TargetActionCode >= 0) {
-    if (TargetActionCode < nDIOs) { // DO1-8
+    if (TargetActionCode < nDOs) { // DO1-8
       if (DataByte > 0) {
-        digitalWriteDirect(gpSMART_DO_Lines[TargetActionCode], 1);
+        digitalWrite(gpSMART_DO_Lines[TargetActionCode], 1);
       } else {
-        digitalWriteDirect(gpSMART_DO_Lines[TargetActionCode], 0);
+        digitalWrite(gpSMART_DO_Lines[TargetActionCode], 0);
       }
-    } else if (TargetActionCode < nDIOs + nPWMs) { // PWM
-      analogWrite(gpSMART_PWM_Lines[TargetActionCode - nDIOs], DataByte);
-    } else if (TargetActionCode < nDIOs + 2 * nPWMs) { // tPWM
-      setTruePWMOutput(TargetActionCode - (nDIOs + nPWMs) + 1, DataByte);
-    } else if (TargetActionCode < nDIOs + 2 * nPWMs + 1) { // Serial3
-      Serial3.write(DataByte);
-    } else if (TargetActionCode < nDIOs + 2 * nPWMs + 2) { // SerialUSB
-      SerialUSB.write(DataByte);
-    } else if (TargetActionCode < nDIOs + 2 * nPWMs + 3) { // GlobalTimerTrig
+    } else if (TargetActionCode < nDOs + nPWMs) { // PWM
+      analogWrite(gpSMART_PWM_Lines[TargetActionCode - nDOs], DataByte);
+    } else if (TargetActionCode < nDOs + nPWMs + ntPWMs) { // tPWM
+      setTruePWMOutput(TargetActionCode - (nDOs + nPWMs) + 1, DataByte);
+    } else if (TargetActionCode < nDOs + nPWMs + ntPWMs + 1) { // Serial
+      Serial1.write(DataByte);
+    } else if (TargetActionCode < nDOs + nPWMs + ntPWMs + 2) { // Serial
+      Serial.write(DataByte);
+    } else if (TargetActionCode < nDOs + nPWMs + ntPWMs + 3) { // GlobalTimerTrig
       if (DataByte > 0 && DataByte <= GLOBAL_TC_NUM) {
         DataByte = DataByte - 1; // Convert to 0 index
         GlobalTimersActive[DataByte] = true;
         GlobalTimerEnd[DataByte] = CurrentTime + sma.GlobalTimerThresholds[DataByte];
       }
-    } else if (TargetActionCode < nDIOs + 2 * nPWMs + 4) { // GlobalTimerCancel
+    } else if (TargetActionCode < nDOs + nPWMs + ntPWMs + 4) { // GlobalTimerCancel
       if (DataByte > 0 && DataByte <= GLOBAL_TC_NUM) {
         DataByte = DataByte - 1; // Convert to 0 index
         GlobalTimersActive[DataByte] = false;
       }
-    } else if (TargetActionCode < nDIOs + 2 * nPWMs + 5) { // GlobalCounterReset
+    } else if (TargetActionCode < nDOs + nPWMs + ntPWMs + 5) { // GlobalCounterReset
       if (DataByte > 0 && DataByte <= GLOBAL_TC_NUM) {
         DataByte = DataByte - 1; // Convert to 0 index
         GlobalCounterCounts[DataByte] = 0;
@@ -389,6 +372,18 @@ void gpSMART::SendSoftEvent(byte EventNum) {
   }
 }
 
+uint8_t gpSMART::returnDIState() {
+  uint8_t DIState = 0;
+  for (int x = 0; x < nDIs; x++) {
+    DIState |= digitalRead(gpSMART_DI_Lines[x]) << x;
+  }
+  return DIState;
+}
+
+uint8_t gpSMART::returnLickState() {
+  return cap.touched_state_8();
+}
+
 
 /******************************************************************/
 /*********************** Callback Functions ***********************/
@@ -401,14 +396,14 @@ void gpSMART_Runner() {
     CurrentEvent[0] = 254; // Event 254 = No event // not necessary
     CurrentTime++;         // 0.1 ms step increment
     // Refresh state of sensors and inputs
-    for (int x = 0; x < nDIOs; x++) {
+    for (int x = 0; x < nDIs; x++) {
       if (DigitalInputsEnabled[x] == 1) {
-        PortInputLineValue[x] = digitalReadDirect(gpSMART_DI_Lines[x]);
+        PortInputLineValue[x] = digitalRead(gpSMART_DI_Lines[x]);
       }
     }
     // Determine which port event occurred
     int Ev = 0; // Since port-in and port-out events are indexed sequentially, Ev replaces x in the loop.
-    for (int x = 0; x < nDIOs; x++) {
+    for (int x = 0; x < nDIs; x++) {
       // Determine port entry events
       if ((PortInputLineValue[x] == HIGH) && (PortInputLineLastKnownStatus[x] == LOW)) {
         PortInputLineLastKnownStatus[x] = HIGH;
@@ -423,6 +418,27 @@ void gpSMART_Runner() {
         nCurrentEvents++;
       }
       Ev = Ev + 1;
+    } // now Ev = 8
+
+    uint8_t currtouched_8 = cap.touched_state_8();// 30 us
+    for (int x = 0; x < nLicks; x++) {
+      PortLickLineValue[x] = (currtouched_8 >> x) & 1;
+    }
+    for (int x = 0; x < nLicks; x++) {
+      // Determine port entry events
+      if ((PortLickLineValue[x] == HIGH) && (PortLickLineLastKnownStatus[x] == LOW)) {
+        PortLickLineLastKnownStatus[x] = HIGH;
+        CurrentEvent[nCurrentEvents] = Ev;
+        nCurrentEvents++;
+      }
+      Ev = Ev + 1;
+      // Determine port exit events
+      if ((PortLickLineValue[x] == LOW) && (PortLickLineLastKnownStatus[x] == HIGH)) {
+        PortLickLineLastKnownStatus[x] = LOW;
+        CurrentEvent[nCurrentEvents] = Ev;
+        nCurrentEvents++;
+      }
+      Ev = Ev + 1;
     } // now Ev = 16
 
     // Determine if Soft Events occur
@@ -433,8 +449,8 @@ void gpSMART_Runner() {
     }
     Ev = Ev + SOFT_EVENT_NUM;
 
-    // Determine if a state timer expired
-    if (sma.InputMatrix[CurrentState][2 * nDIOs + SOFT_EVENT_NUM] != CurrentState) {
+    // Determine if a state timer expired, Tup (event 20)
+    if (sma.InputMatrix[CurrentState][2 * (nDIs + nLicks) + SOFT_EVENT_NUM] != CurrentState) {
       if ((CurrentTime - StateStartTime) >= sma.StateTimers[CurrentState]) {
         CurrentEvent[nCurrentEvents] = Ev;
         nCurrentEvents++;
@@ -497,7 +513,7 @@ void gpSMART_Runner() {
       if (NewState == sma.nStates) {
         smartRunning = false;
         smartFinished = true;
-        gpSMART_Timer.stop();
+        gpSMART_Timer.end();
       } else {
         StateStartTime = CurrentTime;
         CurrentState = NewState;
@@ -508,82 +524,56 @@ void gpSMART_Runner() {
 } // End for gpSMART_Runner
 
 void setTruePWMOutput(byte tPWM_num, byte freq_num ) {
-  switch (tPWM_num) {
-    case 1:
-      if (freq_num > 0 && freq_num <= FREQ_NUM_PER_PWM) {
-        tPWM1.start(tPWM1_period[freq_num], tPWM1_duty[freq_num]);
-      } else {
-        tPWM1.stop();
-      }
-      break;
-    case 2:
-      if (freq_num > 0 && freq_num <= FREQ_NUM_PER_PWM) {
-        tPWM2.start(tPWM2_period[freq_num], tPWM2_duty[freq_num]);
-      } else {
-        tPWM2.stop();
-      }
-      break;
-    case 3:
-      if (freq_num > 0 && freq_num <= FREQ_NUM_PER_PWM) {
-        tPWM3.start(tPWM3_period[freq_num], tPWM3_duty[freq_num]);
-      } else {
-        tPWM3.stop();
-      }
-      break;
-    case 4:
-      if (freq_num > 0 && freq_num <= FREQ_NUM_PER_PWM) {
-        tPWM4.start(tPWM4_period[freq_num], tPWM4_duty[freq_num]);
-      } else {
-        tPWM4.stop();
-      }
-      break;
-    default:
-      break;
+  if (freq_num > 0 && freq_num <= FREQ_NUM_PER_PWM) {
+    analogWriteFrequency(gpSMART_tPWM_Lines[tPWM_num - 1], tPWM_frequency[tPWM_num - 1][freq_num - 1]);
+    analogWrite(gpSMART_tPWM_Lines[tPWM_num - 1], tPWM_duty[tPWM_num - 1][freq_num - 1]);
+  } else {
+    analogWrite(gpSMART_tPWM_Lines[tPWM_num - 1], 0);
   }
 }
 
 void setStateOutputs(byte iState) {
-  // Column 0~7: Digital Output Line 1-nDIOs; Value: 0 or 1
-  for (int x = 0; x < nDIOs; x++) {
+  // Column 0~7: Digital Output Line 1-nDOs; Value: 0 or 1
+  for (int x = 0; x < nDOs; x++) {
     if (sma.OutputMatrix[iState][x] > 0) {
-      digitalWriteDirect(gpSMART_DO_Lines[x], 1);
+      digitalWrite(gpSMART_DO_Lines[x], 1);
     } else {
-      digitalWriteDirect(gpSMART_DO_Lines[x], 0);
+      digitalWrite(gpSMART_DO_Lines[x], 0);
     }
   }
-  // Column 8~11: Regular PWM Output Line 1-nPWMs; Value: 0-255
+  // Column 8~15: Regular PWM Output Line 1-nPWMs; Value: 0-255
   for (int x = 0; x < nPWMs; x++) {
-    analogWrite(gpSMART_PWM_Lines[x], sma.OutputMatrix[iState][x + nDIOs]);
+    analogWrite(gpSMART_PWM_Lines[x], sma.OutputMatrix[iState][x + nDOs]);
   }
-  // Column 12-15: True PWM Output Line 1-nPWMs; Value: 1-4
+  // Column 16-19: True PWM Output Line 1-nPWMs; Value: 0-4
   for (int x = 0; x < nPWMs; x++) {
-    setTruePWMOutput(x + 1, sma.OutputMatrix[iState][x + nDIOs + nPWMs]);
+    setTruePWMOutput(x + 1, sma.OutputMatrix[iState][x + nDOs + nPWMs]);
   }
-  // Column 16: Serial3; Value: 1-255, 0 will be ignored
-  if (sma.OutputMatrix[iState][nDIOs + 2 * nPWMs] > 0) {
-    Serial3.write(sma.OutputMatrix[iState][nDIOs + 2 * nPWMs]);
+  // Column 20: Serial1; Value: 1-255, 0 will be ignored
+  if (sma.OutputMatrix[iState][nDOs + nPWMs + ntPWMs] > 0) {
+    Serial1.write(sma.OutputMatrix[iState][nDOs + nPWMs + ntPWMs]);
   }
-  // Column 17: SerialUSB; Value: 1-255, 0 will be ignored
-  if (sma.OutputMatrix[iState][nDIOs + 2 * nPWMs + 1] > 0) {
-    SerialUSB.write('S');                         // State Message starts with 'S'
-    SerialUSB.write(sma.OutputMatrix[iState][nDIOs + 2 * nPWMs + 1]); // message 1-255
-    SerialUSB.println();
+  // Column 21: Serial; Value: 1-255, 0 will be ignored
+  if (sma.OutputMatrix[iState][nDOs + nPWMs + ntPWMs + 1] > 0) {
+    Serial.write('S');                         // State Message starts with 'S'
+    Serial.write(sma.OutputMatrix[iState][nDOs + nPWMs + ntPWMs + 1]); // message 1-255
+    Serial.println();
   }
-  // Column 18: Trigger global timers; Vaue: 1-GLOBAL_TC_NUM(2)
-  byte CurrentTimer = sma.OutputMatrix[iState][nDIOs + 2 * nPWMs + 2];
+  // Column 22: Trigger global timers; Vaue: 1-GLOBAL_TC_NUM(2)
+  byte CurrentTimer = sma.OutputMatrix[iState][nDOs + nPWMs + ntPWMs + 2];
   if (CurrentTimer > 0 && CurrentTimer <= GLOBAL_TC_NUM) {
     CurrentTimer = CurrentTimer - 1; // Convert to 0 index
     GlobalTimersActive[CurrentTimer] = true;
     GlobalTimerEnd[CurrentTimer] = CurrentTime + sma.GlobalTimerThresholds[CurrentTimer];
   }
-  // Column 19: Cancel global timers; Vaue: 1-GLOBAL_TC_NUM(2)
-  CurrentTimer = sma.OutputMatrix[iState][nDIOs + 2 * nPWMs + 3];
+  // Column 23: Cancel global timers; Vaue: 1-GLOBAL_TC_NUM(2)
+  CurrentTimer = sma.OutputMatrix[iState][nDOs + nPWMs + ntPWMs + 3];
   if (CurrentTimer > 0 && CurrentTimer <= GLOBAL_TC_NUM) {
     CurrentTimer = CurrentTimer - 1; // Convert to 0 index
     GlobalTimersActive[CurrentTimer] = false;
   }
-  // Column 20: Reset event counters; Vaue: 1-GLOBAL_TC_NUM(2)
-  byte CurrentCounter = sma.OutputMatrix[iState][nDIOs + 2 * nPWMs + 4];
+  // Column 24: Reset event counters; Vaue: 1-GLOBAL_TC_NUM(2)
+  byte CurrentCounter = sma.OutputMatrix[iState][nDOs + nPWMs + ntPWMs + 4];
   if (CurrentCounter > 0 && CurrentCounter <= GLOBAL_TC_NUM) {
     CurrentCounter = CurrentCounter - 1; // Convert to 0 index
     GlobalCounterCounts[CurrentCounter] = 0;
@@ -595,14 +585,6 @@ void setStateOutputs(byte iState) {
 /******************************************************************/
 /************************ Other Functions *************************/
 /******************************************************************/
-void digitalWriteDirect(byte pin, bool val) {
-  if (val) g_APinDescription[pin].pPort -> PIO_SODR = g_APinDescription[pin].ulPin;
-  else    g_APinDescription[pin].pPort -> PIO_CODR = g_APinDescription[pin].ulPin;
-}
-
-byte digitalReadDirect(byte pin) {
-  return !!(g_APinDescription[pin].pPort -> PIO_PDSR & g_APinDescription[pin].ulPin);
-}
 
 int find_idx(const String * str_array, int array_length, String target) {
   for (int i = 0; i < array_length; i++) {

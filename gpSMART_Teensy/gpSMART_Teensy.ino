@@ -8,7 +8,7 @@
 gpSMART smart;
 extern TrialResult trial_res;
 extern volatile bool smartFinished; // Has the system exited the matrix (final state)?
-extern bool smartRunning; // 1 if state matrix is running
+extern volatile bool smartRunning; // 1 if state matrix is running
 
 byte TrialType = 0;
 
@@ -18,7 +18,8 @@ void setup() {
 
   delay(3000); // for debug
 
-  SerialUSB.begin(115200);   // To PC
+  Serial.begin(115200);   // To PC
+  // while (!Serial) {}
 
   pinMode(led_port, OUTPUT);
   digitalWrite(led_port, 1);
@@ -38,8 +39,8 @@ void setup() {
 
   for (int trial_num = 0; trial_num < MAX_TRIAL_NUM; trial_num++)
   {
-    SerialUSB.print("Starting trial number: ");
-    SerialUSB.println(trial_num + 1);
+    Serial.print("Starting trial number: ");
+    Serial.println(trial_num + 1);
 
     // clear matrix at the begining of each trial
     smart.EmptyMatrix();
@@ -130,23 +131,23 @@ void setup() {
        trial_res.nVisited:       number of states visited in last trial
        trial_res.stateVisited[]:   the states visited in last trail
     */
-    SerialUSB.print("State Transitions: ");
-    SerialUSB.println(trial_res.nVisited);
+    Serial.print("State Transitions: ");
+    Serial.println(trial_res.nVisited);
     for (int i = 0; i < trial_res.nVisited; i++) {
-      SerialUSB.print(trial_res.stateVisited[i]);
-      SerialUSB.print(" ");
+      Serial.print(trial_res.stateVisited[i]);
+      Serial.print(" ");
     }
-    SerialUSB.println();
+    Serial.println();
 
-    SerialUSB.print("Events Number: ");
-    SerialUSB.println(trial_res.nEvent);
+    Serial.print("Events Number: ");
+    Serial.println(trial_res.nEvent);
     for (int i = 0; i < trial_res.nEvent; i++) {
-      SerialUSB.print(trial_res.EventID[i]);
-      SerialUSB.print(" ");
-      SerialUSB.print(trial_res.eventTimeStamps[i]);
-      SerialUSB.println();
+      Serial.print(trial_res.EventID[i]);
+      Serial.print(" ");
+      Serial.print(trial_res.eventTimeStamps[i]);
+      Serial.println();
     }
-    SerialUSB.println();
+    Serial.println();
 
     // Change parameters based on smart.trial_res for next trial
     UpdateParameters();

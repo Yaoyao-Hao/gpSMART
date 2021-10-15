@@ -1,4 +1,4 @@
-#include "gpSMART_Arduino.h"
+#include "gpSMART_Habits.h"
 /*
    constructing and running state machine on the same Arduino!
 */
@@ -12,17 +12,25 @@ extern volatile bool smartRunning; // 1 if state matrix is running
 
 byte TrialType = 0;
 
+const byte led_port = 13;
+
 void setup() {
 
   delay(3000); // for debug
 
-  SerialUSB.begin(115200);   // To PC
+  Serial.begin(115200);   // To PC
+  // while (!Serial) {}
+
+  pinMode(led_port, OUTPUT);
+  digitalWrite(led_port, 1);
+  delay(1000);
+  digitalWrite(led_port, 0);
 
   // Port and wire parameters for gpSMART.
-  byte PortEnabled[8] = {1, 1, 0, 0, 0, 0, 0, 0};
+  byte PortEnabled[4] = {1, 1, 0, 0};
   smart.setDigitalInputsEnabled(PortEnabled);
 
-  smart.setTruePWMFrequency(1, 1, 3500, 0.5); // byte tPWM_num, byte freq_num, float frequency, float duty
+  smart.setTruePWMFrequency(1, 1, 3500, 128); // byte tPWM_num, byte freq_num, uint32 frequency, byte duty
 
   // free reward
   smart.ManualOverride("DO1", 1); // override valve
@@ -31,8 +39,8 @@ void setup() {
 
   for (int trial_num = 0; trial_num < MAX_TRIAL_NUM; trial_num++)
   {
-    SerialUSB.print("Starting trial number: ");
-    SerialUSB.println(trial_num + 1);
+    Serial.print("Starting trial number: ");
+    Serial.println(trial_num + 1);
 
     // clear matrix at the begining of each trial
     smart.EmptyMatrix();
@@ -92,7 +100,7 @@ void setup() {
     states[7]  = smart.CreateState("GiveLeftDrop",      10, 1, GiveFreeDrop_Cond,    1, GiveLeftDrop_Output);
     states[8]  = smart.CreateState("AnswerPeriod",      10,    3, AnswerPeriod_Cond,    0, NoOutput);
     states[9]  = smart.CreateState("Reward",            100, 1, Reward_Cond,          1, Reward_Output);
-    states[10] = smart.CreateState("RewardConsumption", 1000,        1, Tup_StopLicking_Cond, 0, NoOutput);
+    states[10] = smart.CreateState("RewardConsumption", 100,        1, Tup_StopLicking_Cond, 0, NoOutput);
     states[11] = smart.CreateState("NoResponse",        200,                    1, Tup_StopLicking_Cond, 0, NoOutput);
     states[12] = smart.CreateState("TimeOut",           300,                1, Tup_StopLicking_Cond, 0, NoOutput);
     states[13] = smart.CreateState("StopLicking",       1500,        3, StopLicking_Cond,     0, NoOutput);
@@ -111,8 +119,10 @@ void setup() {
 
     smart.PrintMatrix();
 
+    digitalWrite(led_port, 0);
     smart.Run();
     while (smartFinished == 0) {} // wait until a trial is done
+    digitalWrite(led_port, 1);
 
     /* data will be stored in public variable 'trial_res', which includes:
        trial_res.nEvent:           number of event happened in last trial
@@ -121,23 +131,23 @@ void setup() {
        trial_res.nVisited:       number of states visited in last trial
        trial_res.stateVisited[]:   the states visited in last trail
     */
-    SerialUSB.print("State Transitions: ");
-    SerialUSB.println(trial_res.nVisited);
+    Serial.print("State Transitions: ");
+    Serial.println(trial_res.nVisited);
     for (int i = 0; i < trial_res.nVisited; i++) {
-      SerialUSB.print(trial_res.stateVisited[i]);
-      SerialUSB.print(" ");
+      Serial.print(trial_res.stateVisited[i]);
+      Serial.print(" ");
     }
-    SerialUSB.println();
+    Serial.println();
 
-    SerialUSB.print("Events Number: ");
-    SerialUSB.println(trial_res.nEvent);
+    Serial.print("Events Number: ");
+    Serial.println(trial_res.nEvent);
     for (int i = 0; i < trial_res.nEvent; i++) {
-      SerialUSB.print(trial_res.EventID[i]);
-      SerialUSB.print(" ");
-      SerialUSB.print(trial_res.eventTimeStamps[i]);
-      SerialUSB.println();
+      Serial.print(trial_res.EventID[i]);
+      Serial.print(" ");
+      Serial.print(trial_res.eventTimeStamps[i]);
+      Serial.println();
     }
-    SerialUSB.println();
+    Serial.println();
 
     // Change parameters based on smart.trial_res for next trial
     UpdateParameters();

@@ -27,7 +27,7 @@ byte DigitalInputsEnabled[nDIOs] = {1, 1, 1, 1, 1, 1, 1, 1};
 /*******************************************************************/
 TrialResult trial_res;		// store events and state transitions in one trial
 bool volatile smartFinished = false; 	// indicating if current trial is finished
-bool smartRunning = false; 		// indicating if state matrix for current trial is running
+bool volatile smartRunning = false; 		// indicating if state matrix for current trial is running
 
 
 /*****************************************************************/
@@ -231,39 +231,39 @@ void gpSMART::SetGlobalCounter(byte CounterNumber, String TargetEventName, uint1
 }
 
 void gpSMART::PrintMatrix() {
-  SerialUSB.print("Number of States: ");
-  SerialUSB.println(sma.nStates);
-  SerialUSB.println("StateNames\tTimer\tDefined");
+  Serial.print("Number of States: ");
+  Serial.println(sma.nStates);
+  Serial.println("StateNames\tTimer\tDefined");
   for (int i = 0; i < sma.nStates; i++) {
-    SerialUSB.print(sma.StateNames[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.StateTimers[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.StatesDefined[i]);
-    SerialUSB.println();
+    Serial.print(sma.StateNames[i]);
+    Serial.print("\t");
+    Serial.print(sma.StateTimers[i]);
+    Serial.print("\t");
+    Serial.print(sma.StatesDefined[i]);
+    Serial.println();
   }
-  SerialUSB.println("InputMatrix: ");
+  Serial.println("InputMatrix: ");
   for (int i = 0; i < sma.nStates; i++) {
     for (int j = 0; j < nInputs; j++) {
-      SerialUSB.print(sma.InputMatrix[i][j]);
+      Serial.print(sma.InputMatrix[i][j]);
     }
-    SerialUSB.println();
+    Serial.println();
   }
-  SerialUSB.println("OutputMatrix: ");
+  Serial.println("OutputMatrix: ");
   for (int i = 0; i < sma.nStates; i++) {
     for (int j = 0; j < nOutputs; j++) {
-      SerialUSB.print(sma.OutputMatrix[i][j]);
+      Serial.print(sma.OutputMatrix[i][j]);
     }
-    SerialUSB.println();
+    Serial.println();
   }
-  SerialUSB.println("GT-thres\tGC-evt\tGC-thres");
+  Serial.println("GT-thres\tGC-evt\tGC-thres");
   for (int i = 0; i < GLOBAL_TC_NUM; i++) {
-    SerialUSB.print(sma.GlobalTimerThresholds[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.GlobalCounterAttachedEvents[i]);
-    SerialUSB.print("\t");
-    SerialUSB.print(sma.GlobalCounterThresholds[i]);
-    SerialUSB.println();
+    Serial.print(sma.GlobalTimerThresholds[i]);
+    Serial.print("\t");
+    Serial.print(sma.GlobalCounterAttachedEvents[i]);
+    Serial.print("\t");
+    Serial.print(sma.GlobalCounterThresholds[i]);
+    Serial.println();
   }
 }
 
@@ -308,7 +308,7 @@ void gpSMART::Run() {
   setStateOutputs(CurrentState);
   smartRunning = 1;
   gpSMART_Timer.begin(gpSMART_Runner, 100); // Runs every 100us
-  SerialUSB.println("M: State machine is running...");
+  Serial.println("M: State machine is running...");
 }
 
 void gpSMART::Stop() {
@@ -513,9 +513,9 @@ void setStateOutputs(byte iState) {
   }
   // Column 21: Serial; Value: 1-255, 0 will be ignored
   if (sma.OutputMatrix[iState][nDIOs + nPWMs + ntPWMs + 1] > 0) {
-    SerialUSB.write('S');                         // State Message starts with 'S'
-    SerialUSB.write(sma.OutputMatrix[iState][nDIOs + nPWMs + ntPWMs + 1]); // message 1-255
-    SerialUSB.println();
+    Serial.write('S');                         // State Message starts with 'S'
+    Serial.write(sma.OutputMatrix[iState][nDIOs + nPWMs + ntPWMs + 1]); // message 1-255
+    Serial.println();
   }
   // Column 22: Trigger global timers; Vaue: 1-GLOBAL_TC_NUM(2)
   byte CurrentTimer = sma.OutputMatrix[iState][nDIOs + nPWMs + ntPWMs + 2];

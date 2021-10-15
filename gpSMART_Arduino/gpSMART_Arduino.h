@@ -146,7 +146,7 @@ struct TrialResult {
 
 extern TrialResult trial_res;	// store events and state transition in one trial
 extern volatile bool smartFinished; 		// indicating if current trial is finished
-extern bool smartRunning;  		// indicating if state matrix for current trial is running
+extern volatile bool smartRunning;  		// indicating if state matrix for current trial is running
 
 // main class
 class gpSMART {

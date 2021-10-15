@@ -118,7 +118,7 @@ const PROGMEM String OutputActionNames[] = { // 25 in total = 8 nDOs + 8 nPWMs +
 const byte nInputs  = sizeof(EventNames) / sizeof(EventNames[0]);               // 25
 const byte nOutputs = sizeof(OutputActionNames) / sizeof(OutputActionNames[0]); // 25
 
-const int TimerScaleFactor = 10; // from msec (defined in state machine) to gpSMART resolution (0.1 ms)
+const int TimerScaleFactor = 1; // from msec (defined in state machine) to gpSMART_Habits resolution (1 ms)
 
 // important structures
 struct OutputAction {

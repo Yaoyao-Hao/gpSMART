@@ -316,7 +316,7 @@ void gpSMART::Run() {
   // Adjust outputs
   setStateOutputs(CurrentState);
   smartRunning = 1;
-  gpSMART_Timer.begin(gpSMART_Runner, 100); // Runs every 100us
+  gpSMART_Timer.begin(gpSMART_Runner, 1000/TimerScaleFactor); // Timer unit: us
   Serial.println("M: State machine is running...");
 }
 

@@ -1,0 +1,4 @@
+Changes relative to gpSMART_Teensy:
+1. DI5-8 replaeced by Lick1-4, read by MPR121 Library.
+2. Include 'returnDIState' and 'returnLickState' function for gpSMART.
+3. Timer resolution changes to 1 ms resolution.

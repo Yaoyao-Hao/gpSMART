@@ -72,7 +72,7 @@ bool MPR121::begin(uint8_t num_electrode) {
   uint8_t c = readRegister8(MPR121_CONFIG2);
 
   if (c != 0x24) {
-    Serial.println(c);
+    //Serial.println(c);
     //return false;
   }
 

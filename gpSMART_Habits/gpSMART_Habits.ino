@@ -30,10 +30,10 @@ void setup() {
   Serial.begin(115200);   // To PC
   // while (!Serial) {}
 
-  pinMode(led_port, OUTPUT);
-  digitalWrite(led_port, 1);
-  delay(1000);
-  digitalWrite(led_port, 0);
+//  pinMode(led_port, OUTPUT);
+//  digitalWrite(led_port, 1);
+//  delay(1000);
+//  digitalWrite(led_port, 0);
   pinMode(switchPin, INPUT_PULLUP); // low if switch on; hight if switch off
 
   byte PortEnabled[4] = {0, 0, 0, 0};
@@ -106,9 +106,9 @@ void loop() {
     states[1]  = smart.CreateState("SamplePeriod",      1000,       1, SamplePeriod_Cond,    1, Sample_Output);
     states[2]  = smart.CreateState("DelayPeriod",       500,        1, DelayPeriod_Cond,     0, NoOutput);
     states[3]  = smart.CreateState("ResponseCue",       100,                  1, ResponseCue_Cond,     1, ResponseCue_Output);
-    states[4]  = smart.CreateState("GiveFreeDrop",      1000,           1, GiveFreeDrop_Cond,    1, Reward_Output);
+    states[4]  = smart.CreateState("GiveFreeDrop",      10000,           1, GiveFreeDrop_Cond,    1, Reward_Output);
     states[5]  = smart.CreateState("AnswerPeriod",      4000,       3, AnswerPeriod_Cond,    0, NoOutput);
-    states[6]  = smart.CreateState("Reward",            1000,           1, Reward_Cond,          1, Reward_Output);
+    states[6]  = smart.CreateState("Reward",            reward_dur,           1, Reward_Cond,          1, Reward_Output);
     states[7]  = smart.CreateState("RewardConsumption", 750,  1, Tup_Exit_Cond,        0, NoOutput);
     states[8]  = smart.CreateState("NoResponse",        1000, 3, NoResponse_Cond,      0, NoOutput); // 1-hr: 60*60*1000 msec
 
@@ -146,13 +146,13 @@ void loop() {
 
     Serial.print("Events Number: ");
     Serial.println(trial_res.nEvent);
-    for (int i = 0; i < trial_res.nEvent; i++) {
-      Serial.print(trial_res.EventID[i]);
-      Serial.print(" ");
-      Serial.print(trial_res.eventTimeStamps[i]);
-      Serial.print(" ");
-    }
-    Serial.println();
+//    for (int i = 0; i < trial_res.nEvent; i++) {
+//      Serial.print(trial_res.EventID[i]);
+//      Serial.print(" ");
+//      Serial.print(trial_res.eventTimeStamps[i]);
+//      Serial.print(" ");
+//    }
+//    Serial.println();
 
     // Change parameters based on smart.trial_res for next trial
     UpdateParameters();
@@ -170,6 +170,6 @@ void UpdateParameters() {
   if (random(100) < 50) {
     TrialType = 1;
   } else {
-    TrialType = 2;
+    TrialType = 1;
   }
 }

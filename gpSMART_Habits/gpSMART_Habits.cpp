@@ -62,7 +62,7 @@ gpSMART::gpSMART() {
   for (int x = 0; x < nDIs; x++) {
     pinMode(gpSMART_DI_Lines[x], INPUT_PULLUP);
   }
-  for (int x = 0; x < nDIs; x++) {
+  for (int x = 0; x < nDOs; x++) {
     pinMode(gpSMART_DO_Lines[x], OUTPUT);
     digitalWrite(gpSMART_DO_Lines[x], 0);
   }

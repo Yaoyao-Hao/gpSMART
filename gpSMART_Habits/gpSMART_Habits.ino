@@ -10,9 +10,15 @@ extern TrialResult trial_res;
 extern volatile bool smartFinished; // Has the system exited the matrix (final state)?
 extern volatile bool smartRunning; // 1 if state matrix is running
 
-byte TrialType = 0;
+byte TrialType = 1;
 
 const byte led_port = 13;
+
+OutputAction LeftWaterOutput  = {"DO1", 1};
+OutputAction RightWaterOutput = {"DO2", 1};
+OutputAction LowSoundOutput   = {"tPWM2", 1};
+OutputAction HighSoundOutput  = {"tPWM2", 2};
+OutputAction CueOutput        = {"tPWM2", 3};
 
 void setup() {
 
@@ -26,11 +32,12 @@ void setup() {
   delay(1000);
   digitalWrite(led_port, 0);
 
-  // Port and wire parameters for gpSMART.
-  byte PortEnabled[4] = {1, 1, 0, 0};
+    byte PortEnabled[4] = {0, 0, 0, 0};
   smart.setDigitalInputsEnabled(PortEnabled);
-
-  smart.setTruePWMFrequency(1, 1, 3500, 128); // byte tPWM_num, byte freq_num, uint32 frequency, byte duty
+  // tPWM1: left sound; tPWM2: top sound; tPWM3: right sound
+  smart.setTruePWMFrequency(2, 1, 3000, 128);  // (low sound) byte tPWM_num, byte freq_num, uint32 frequency, byte duty
+  smart.setTruePWMFrequency(2, 2, 10000, 128); // (high sound) byte tPWM_num, byte freq_num, uint32 frequency, byte duty
+  smart.setTruePWMFrequency(2, 3, 6500, 128);  // (go cue) byte tPWM_num, byte freq_num, uint32 frequency, byte duty
 
   // free reward
   smart.ManualOverride("DO1", 1); // override valve
@@ -45,84 +52,77 @@ void setup() {
     // clear matrix at the begining of each trial
     smart.EmptyMatrix();
 
-    String LeftLickAction;
-    String RightLickAction;
-    OutputAction LeftWaterOutput = {"DO1", 1};
-    OutputAction RightWaterOutput = {"DO2", 1};
-    OutputAction CueOutput = {"tPWM1", 1};
-    OutputAction PoleOutput = {"PWM1", 255};
-    OutputAction WaveSurferTrig = {"DO3", 1};
-    OutputAction RewardOutput;
-    switch (TrialType) {
-      case 1:
-        LeftLickAction  = "Reward";
-        RightLickAction = "TimeOut";
-        RewardOutput    = LeftWaterOutput;
-        break;
-      case 0:
-        LeftLickAction  = "TimeOut";
-        RightLickAction = "Reward";
-        RewardOutput    = RightWaterOutput;
-        break;
-    }
+OutputAction SampleOutput;
+        OutputAction RewardOutput;
+        String LeftLickAction;
+        String RightLickAction;
+        String ActionAfterDelay;
+        float reward_dur = 30;
+        switch (TrialType) {
+          case 1: // left-low sound
+            SampleOutput    = LowSoundOutput;
+            LeftLickAction  = "Reward";
+            RightLickAction = "AnswerPeriod"; // no error trial
+            RewardOutput    = LeftWaterOutput;
+            reward_dur      = 30;
+            break;
+          case 2: // right-high sound
+            SampleOutput    = HighSoundOutput;
+            LeftLickAction  = "AnswerPeriod"; // no error trial
+            RightLickAction = "Reward";
+            RewardOutput    = RightWaterOutput;
+            reward_dur      = 30;
+            break;
+        }
+        if (random(100) < 100) { // free reward probability
+          ActionAfterDelay = "GiveFreeDrop";
+        } else {
+          ActionAfterDelay = "ResponseCue";
+        }
 
-    StateTransition TrigTrialStart_Cond[1]     = {{"Tup", "SamplePeriod"}}; //
-    StateTransition SamplePeriod_Cond[3]       = {{"DI1Rising", "EarlyLickSample"}, {"DI2Rising", "EarlyLickSample"}, {"Tup", "DelayPeriod"}};
-    StateTransition Sample_noforce_Cond[1]     = {{"Tup", "DelayPeriod"}};
-    StateTransition EarlyLickSample_Cond[1]    = {{"Tup", "SamplePeriod"}};
-    StateTransition DelayPeriod_Cond[3]        = {{"DI1Rising", "EarlyLickDelay"}, {"DI2Rising", "EarlyLickDelay"}, {"Tup", "ResponseCue"}};
-    StateTransition EarlyLickDelay_Cond[1]     = {{"Tup", "DelayPeriod"}};
-    StateTransition ResponseCue_Cond[1]        = {{"Tup", "AnswerPeriod"}};
-    StateTransition GiveFreeDrop_Cond[1]       = {{"Tup", "ResponseCue"}};
-    StateTransition AnswerPeriod_Cond[3]       = {{"DI1Rising", LeftLickAction}, {"DI2Rising", RightLickAction}, {"Tup", "NoResponse"}};
-    StateTransition Reward_Cond[1]             = {{"Tup", "RewardConsumption"}};
-    StateTransition Tup_StopLicking_Cond[1]    = {{"Tup", "StopLicking"}};
-    StateTransition Tup_EndTrial_Cond[1]       = {{"Tup", "TrialEnd"}};
-    StateTransition StopLicking_Cond[3]        = {{"DI1Rising", "StopLickingReturn"}, {"DI2Rising", "StopLickingReturn"}, {"Tup", "TrialEnd"}}; //
-    StateTransition TrialEnd_Cond[1]           = {{"Tup", "exit"}};
+        StateTransition TrialStart_Cond[1]     = {{"Tup", "SamplePeriod"}}; //
+        StateTransition SamplePeriod_Cond[1]   = {{"Tup", "DelayPeriod"}};
+        StateTransition DelayPeriod_Cond[1]    = {{"Tup", ActionAfterDelay}};
+        StateTransition ResponseCue_Cond[1]    = {{"Tup", "AnswerPeriod"}};
+        StateTransition GiveFreeDrop_Cond[1]   = {{"Tup", "ResponseCue"}};
+        StateTransition AnswerPeriod_Cond[3]   = {{"Lick1In", LeftLickAction}, {"Lick2In", RightLickAction}, {"Tup", "NoResponse"}};
+        StateTransition Reward_Cond[1]         = {{"Tup", "RewardConsumption"}};
+        StateTransition Tup_Exit_Cond[1]       = {{"Tup", "exit"}};
+        StateTransition NoResponse_Cond[3]     = {{"Lick1In", "exit"}, {"Lick2In", "exit"}, {"Tup", "exit"}};
 
-    OutputAction TrigTrialStart_Output[1]  = {WaveSurferTrig};
-    OutputAction Sample_Pole_Output[1]     = {PoleOutput};
-    OutputAction ResponseCue_Output[1]     = {CueOutput};
-    OutputAction GiveRightDrop_Output[1]   = {RightWaterOutput};
-    OutputAction GiveLeftDrop_Output[1]    = {LeftWaterOutput};
-    OutputAction Reward_Output[1]          = {RewardOutput};
-    OutputAction NoOutput[0]               = {};
+        OutputAction Sample_Output[1]          = {SampleOutput};
+        OutputAction ResponseCue_Output[1]     = {CueOutput};
+        OutputAction Reward_Output[1]          = {RewardOutput};
+        OutputAction NoOutput[0]               = {};
 
-    gpSMART_State states[16] = {};
-    states[0]  = smart.CreateState("TrigTrialStart",    1000,                     1, TrigTrialStart_Cond,  1, TrigTrialStart_Output); // msec
-    states[1]  = smart.CreateState("SamplePeriod",      3000,                      3, SamplePeriod_Cond,    1, Sample_Pole_Output);
-    states[2]  = smart.CreateState("EarlyLickSample",   50,                     1, EarlyLickSample_Cond, 1, Sample_Pole_Output);
-    states[3]  = smart.CreateState("DelayPeriod",       3000,                      3, DelayPeriod_Cond,     0, NoOutput);
-    states[4]  = smart.CreateState("EarlyLickDelay",    50,                     1, EarlyLickDelay_Cond,  0, NoOutput);
-    states[5]  = smart.CreateState("ResponseCue",       10,                      1, ResponseCue_Cond,     1, ResponseCue_Output);
-    states[6]  = smart.CreateState("GiveRightDrop",     30,                      1, GiveFreeDrop_Cond,    1, GiveRightDrop_Output);
-    states[7]  = smart.CreateState("GiveLeftDrop",      10, 1, GiveFreeDrop_Cond,    1, GiveLeftDrop_Output);
-    states[8]  = smart.CreateState("AnswerPeriod",      10,    3, AnswerPeriod_Cond,    0, NoOutput);
-    states[9]  = smart.CreateState("Reward",            100, 1, Reward_Cond,          1, Reward_Output);
-    states[10] = smart.CreateState("RewardConsumption", 100,        1, Tup_StopLicking_Cond, 0, NoOutput);
-    states[11] = smart.CreateState("NoResponse",        200,                    1, Tup_StopLicking_Cond, 0, NoOutput);
-    states[12] = smart.CreateState("TimeOut",           300,                1, Tup_StopLicking_Cond, 0, NoOutput);
-    states[13] = smart.CreateState("StopLicking",       1500,        3, StopLicking_Cond,     0, NoOutput);
-    states[14] = smart.CreateState("StopLickingReturn", 100,                     1, Tup_StopLicking_Cond, 0, NoOutput);
-    states[15] = smart.CreateState("TrialEnd",          100,                     1, TrialEnd_Cond,        0, NoOutput);
+        gpSMART_State states[9] = {};
+        
+        states[0]  = smart.CreateState("TrialStart",        10,                   1, TrialStart_Cond,      0, NoOutput); // msec
+        states[1]  = smart.CreateState("SamplePeriod",      1000,       1, SamplePeriod_Cond,    1, Sample_Output);
+        states[2]  = smart.CreateState("DelayPeriod",       500,        1, DelayPeriod_Cond,     0, NoOutput);
+        states[3]  = smart.CreateState("ResponseCue",       100,                  1, ResponseCue_Cond,     1, ResponseCue_Output);
+        states[4]  = smart.CreateState("GiveFreeDrop",      reward_dur,           1, GiveFreeDrop_Cond,    1, Reward_Output);
+        states[5]  = smart.CreateState("AnswerPeriod",      4000,       3, AnswerPeriod_Cond,    0, NoOutput);
+        states[6]  = smart.CreateState("Reward",            reward_dur,           1, Reward_Cond,          1, Reward_Output);
+        states[7]  = smart.CreateState("RewardConsumption", 750,  1, Tup_Exit_Cond,        0, NoOutput);
+        states[8]  = smart.CreateState("NoResponse",        1000, 3, NoResponse_Cond,      0, NoOutput); // 1-hr: 60*60*1000 msec
 
-    // Predefine State sequence.
-    for (int i = 0; i < 16; i++) {
-      smart.AddBlankState(states[i].Name);
-    }
+        // Predefine State sequence.
+        for (int i = 0; i < 9; i++) {
+          smart.AddBlankState(states[i].Name);
+        }
 
-    // Add a state to state machine.
-    for (int i = 0; i < 16; i++) {
-      smart.AddState(&states[i]);
-    }
+        // Add a state to state machine.
+        for (int i = 0; i < 9; i++) {
+          smart.AddState(&states[i]);
+        }
 
-    smart.PrintMatrix();
+        smart.PrintMatrix(); // for debug
 
     digitalWrite(led_port, 0);
     smart.Run();
     while (smartFinished == 0) {} // wait until a trial is done
-    digitalWrite(led_port, 1);
+    analogWrite(led_port, 128);
 
     /* data will be stored in public variable 'trial_res', which includes:
        trial_res.nEvent:           number of event happened in last trial
@@ -168,6 +168,6 @@ void UpdateParameters() {
   if (random(100) < 50) {
     TrialType = 1;
   } else {
-    TrialType = 0;
+    TrialType = 2;
   }
 }

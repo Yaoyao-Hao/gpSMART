@@ -79,7 +79,7 @@ gpSMART::gpSMART() {
   // for capacitive sensor
   Wire.begin();
   Wire.setClock(1000000);
-  cap.begin(4); // using 4 out of 12 electrode
+  cap.begin(3); // using 3 out of 12 electrode
   // attach ISR to gpSMART_Timer (not necessary for Teensy)
   //gpSMART_Timer.begin(gpSMART_Runner, 100); // Runs every 100us
   //gpSMART_Timer.end();
@@ -545,8 +545,8 @@ void setStateOutputs(byte iState) {
   for (int x = 0; x < nPWMs; x++) {
     analogWrite(gpSMART_PWM_Lines[x], sma.OutputMatrix[iState][x + nDOs]);
   }
-  // Column 16-19: True PWM Output Line 1-nPWMs; Value: 0-4
-  for (int x = 0; x < nPWMs; x++) {
+  // Column 16-19: True PWM Output Line 1-ntPWMs; Value: 0-4
+  for (int x = 0; x < ntPWMs; x++) {
     setTruePWMOutput(x + 1, sma.OutputMatrix[iState][x + nDOs + nPWMs]);
   }
   // Column 20: Serial1; Value: 1-255, 0 will be ignored

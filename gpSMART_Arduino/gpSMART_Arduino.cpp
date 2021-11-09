@@ -555,8 +555,8 @@ void setStateOutputs(byte iState) {
   for (int x = 0; x < nPWMs; x++) {
     analogWrite(gpSMART_PWM_Lines[x], sma.OutputMatrix[iState][x + nDIOs]);
   }
-  // Column 12-15: True PWM Output Line 1-nPWMs; Value: 1-4
-  for (int x = 0; x < nPWMs; x++) {
+  // Column 12-15: True PWM Output Line 1-ntPWMs; Value: 1-4
+  for (int x = 0; x < ntPWMs; x++) {
     setTruePWMOutput(x + 1, sma.OutputMatrix[iState][x + nDIOs + nPWMs]);
   }
   // Column 16: Serial3; Value: 1-255, 0 will be ignored
